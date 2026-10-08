@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dona Clara — Panificadora &amp; Empório</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><div class="wrap"><div class="marca">Panificadora &amp; Empório Dona Clara · há 12 anos no bairro</div>
+<h1>O pão da Dona Clara, sem fila e sem esgotar.</h1>
+<p>Veja o que ainda tem hoje, reserve para retirar no balcão ou encomende bolos, tábuas de frios e coffee breaks com antecedência.</p></div></header>
+<main class="wrap">
+<h2>O que você quer?</h2>
+<div class="tabs" role="radiogroup" aria-label="Tipo de pedido">
+<label><input type="radio" name="type" value="hoje" checked><span>Retirar hoje</span><br><small>Reserva do que há em estoque</small></label>
+<label><input type="radio" name="type" value="encomenda"><span>Encomenda para evento</span><br><small>Com 48 horas de antecedência</small></label></div>
+<div id="catalogo"></div>
+
+<h2 id="finalizar">Seus dados</h2>
+<form id="form" novalidate>
+<label class="f">Nome<input type="text" id="name" autocomplete="name" required></label>
+<label class="f">Telefone com DDD<input type="tel" id="phone" autocomplete="tel" placeholder="(41) 99999-0000" required></label>
+<label class="f"><span id="lblWhen">Quando você retira?</span><input type="datetime-local" id="when" required></label>
+<label class="f">Observações (sabor, alergias, recado)<textarea id="notes" rows="2"></textarea></label>
+<div id="aviso" role="alert"></div>
+<button class="btn" type="submit">Confirmar pedido</button>
+</form>
+</main>
+<div class="barra"><div class="wrap"><span id="resumo">Nenhum item escolhido</span><a class="btn" href="#finalizar">Finalizar</a></div></div>
+<script>
+const cart={}; let products=[]; const $=s=>document.querySelector(s);
+const brl=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const tipo=()=>document.querySelector('input[name=type]:checked').value;
+async function init(){products=await (await fetch('/api/products')).json();render()}
+function render(){
+  const t=tipo(), cats=t==='hoje'?['Pães','Doces']:['Doces','Eventos','Pães'];
+  $('#catalogo').innerHTML=cats.map(c=>`<h2>${c}</h2><div class="grid">`+products.filter(p=>p.cat===c).map(p=>{
+    const q=cart[p.id]||0, esg=t==='hoje'&&p.stock===0, max=t==='hoje'?p.stock:99;
+    const est=t==='hoje'?(esg?'<span class="estoque baixo">Esgotado hoje</span>':`<span class="estoque ${p.stock<=3?'baixo':''}">${p.stock<=3?'Últimas ':''}${p.stock} disponíveis hoje</span>`):'<span class="estoque">Sob encomenda</span>';
+    return `<div class="item"><h3>${p.name}</h3><small>${p.desc}</small><span class="preco">${brl(p.price)}</span>${est}
+    <div class="qty"><button aria-label="Tirar um ${p.name}" data-id="${p.id}" data-d="-1" ${q?'':'disabled'}>−</button><b>${q}</b><button aria-label="Adicionar um ${p.name}" data-id="${p.id}" data-d="1" ${q>=max?'disabled':''}>+</button></div></div>`}).join('')+'</div>').join('');
+  $('#lblWhen').textContent=t==='hoje'?'Quando você retira?':'Data e horário do evento';
+  const n=Object.values(cart).reduce((a,b)=>a+b,0), tot=Object.entries(cart).reduce((a,[id,q])=>a+q*products.find(p=>p.id==id).price,0);
+  $('#resumo').textContent=n?`${n} ite${n>1?'ns':'m'} · ${brl(tot)}`:'Nenhum item escolhido';
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-d]');if(!b)return;const id=b.dataset.id;cart[id]=Math.max(0,(cart[id]||0)+Number(b.dataset.d));if(!cart[id])delete cart[id];render();$('[data-id="'+id+'"][data-d="'+b.dataset.d+'"]')?.focus()});
+document.querySelectorAll('input[name=type]').forEach(r=>r.addEventListener('change',()=>{
+  for(const id in cart){const p=products.find(x=>x.id==id);if(tipo()==='hoje'&&(p.cat==='Eventos'||cart[id]>p.stock))delete cart[id]}render()}));
+$('#form').addEventListener('submit',async e=>{
+  e.preventDefault();const av=$('#aviso');
+  const body={type:tipo(),name:$('#name').value,phone:$('#phone').value,when:$('#when').value,notes:$('#notes').value,items:Object.entries(cart).map(([id,qty])=>({id:+id,qty}))};
+  const r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}), d=await r.json();
+  if(!r.ok){av.className='msg erro';av.textContent=d.error;return}
+  av.className='msg ok';av.textContent=`Pedido ${d.code} recebido! Total ${brl(d.total)}. Avisaremos pelo WhatsApp no número informado.`;
+  for(const k in cart)delete cart[k];$('#form').reset();await init();
+});
+init();
+</script></body></html>

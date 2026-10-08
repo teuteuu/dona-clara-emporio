@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel de pedidos — Dona Clara</title><link rel="stylesheet" href="style.css"></head>
+<body><main class="wrap"><h1>Pedidos da Dona Clara</h1>
+<form id="login" style="margin:20px 0"><label class="f">Senha do painel<input type="password" id="pw" autocomplete="current-password"></label><button class="btn">Entrar</button></form>
+<div id="aviso" role="alert"></div><div style="overflow-x:auto"><table id="tab" hidden><thead><tr><th>Código</th><th>Cliente</th><th>Tipo / quando</th><th>Itens</th><th>Total</th><th>Status</th></tr></thead><tbody></tbody></table></div></main>
+<script>
+const S=['Recebido','Em preparo','Pronto','Entregue','Cancelado'];let pw='';const $=s=>document.querySelector(s);
+const brl=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function load(){
+  const r=await fetch('/api/orders',{headers:{'x-admin-password':pw}}),d=await r.json();
+  if(!r.ok){$('#aviso').className='msg erro';$('#aviso').textContent=d.error;return}
+  $('#aviso').className='';$('#aviso').textContent='';$('#tab').hidden=false;
+  $('tbody').innerHTML=d.length?d.map(o=>`<tr><td>${o.code}</td><td>${esc(o.name)}<br><small>${esc(o.phone)}</small></td>
+  <td>${o.type==='hoje'?'Retirada':'Encomenda'}<br><small>${new Date(o.when).toLocaleString('pt-BR')}</small>${o.notes?`<br><small>Obs: ${esc(o.notes)}</small>`:''}</td>
+  <td>${o.items.map(i=>`${i.qty}× ${esc(i.name)}`).join('<br>')}</td><td>${brl(o.total)}</td>
+  <td><select data-c="${o.code}" aria-label="Status do pedido ${o.code}">${S.map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}</select></td></tr>`).join(''):'<tr><td colspan=6>Nenhum pedido ainda. Eles aparecem aqui assim que os clientes enviarem.</td></tr>';
+}
+$('#login').addEventListener('submit',e=>{e.preventDefault();pw=$('#pw').value;load()});
+document.addEventListener('change',async e=>{const c=e.target.dataset.c;if(!c)return;
+  await fetch('/api/orders/'+c,{method:'PATCH',headers:{'Content-Type':'application/json','x-admin-password':pw},body:JSON.stringify({status:e.target.value})});});
+</script></body></html>
